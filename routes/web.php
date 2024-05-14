@@ -81,7 +81,7 @@ Route::middleware('auth')->group(function () {
         $retryDelay=3;
         @ini_set('max_execution_time', 10000);
         @set_time_limit(3000);
-        $companylocations=CompanyLocation::where('company_id',9)->get();
+        $companylocations=CompanyLocation::where('company_id',9)->where('today',NULL)->get();
         foreach($companylocations as $cl){
             $apiUrl = "contacts/?limit=100";
             set_time_limit(0);
