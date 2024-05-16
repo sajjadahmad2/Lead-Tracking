@@ -138,6 +138,56 @@ class SettingController extends Controller
                 $checklocation->leads_dem =0;
                 $checklocation->leads_del =0;
                 $checklocation->save();
+                $apiUrl = "contacts/?limit=100";
+            set_time_limit(0);
+            ini_set('max_execution_time', 18000000);
+            $cl=$checklocation;
+            $counter=0;
+            $allContacts=[];
+        do {
+            $counter++;
+            $nextReq = false;
+            $delay = 1;
+            sleep($delay);
+            $contacts = ghl_api_call($masterid,$cl->location_id, $apiUrl); // Make the API call
+            Log::info("Job Created ".  json_encode($contacts));
+            if ($contacts) {
+                if (property_exists($contacts, 'contacts') && count($contacts->contacts) > 0) {
+                    $allContacts = array_merge($allContacts, $contacts->contacts);
+                    if (property_exists($contacts, 'meta') && property_exists($contacts->meta, 'nextPageUrl') && property_exists($contacts->meta, 'nextPage') && !is_null($contacts->meta->nextPage) && !empty($contacts->meta->nextPageUrl)) {
+                        $apiUrl = $contacts->meta->nextPageUrl;
+                        $nextReq = true;
+                    }
+
+                }
+
+            }
+        } while ($nextReq);
+        $today=0;
+        $yesterday=0;
+        $last7days=0;
+        $currentDate = new DateTime();
+        foreach($allContacts as $contact){
+            if(property_exists($contact,'dateAdded')){
+                $dateAdded = new DateTime($contact->dateAdded);
+                $interval = $currentDate->diff($dateAdded);
+                $daysDiff = $interval->days;
+                if ($daysDiff === 0) {
+                    $today++;
+                }elseif ($daysDiff === 1) {
+                    $yesterday++;
+                }elseif ($daysDiff <= 7) {
+                    $last7days++;
+                }else{
+                    break;
+                }
+            }
+
+        }
+        $cl->today=$today;
+        $cl->yesterday=$yesterday;
+        $cl->last_7days=$last7days;
+        $cl->save();
 
 
               }
