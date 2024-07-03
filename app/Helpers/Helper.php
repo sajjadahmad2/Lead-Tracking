@@ -23,6 +23,33 @@ function supersetting($key, $default = '')
     }
     return $default;
 }
+function uploadFile($file, $path, $name)
+{
+    $name = $name . '.' . $file->ClientExtension();
+    $file->move($path, $name);
+    return $path . '/' . $name;
+}
+//Get the Company id
+function company(){
+    $user=GhlAuth::Where('user_type','company')->first();
+    if($user){
+        return User::where('id',$user->user_id)->first();
+    }else{
+        return User::where('id',1)->first();
+    }
+}
+//chnage the field title
+function change_field_title($name = '')
+{
+    if ($name == 'Leads Dev') {
+        return 'Total Leads';
+    } else if ($name == 'Leads Dem') {
+        return ' Leads Limit';
+    }
+    else {
+        return false;
+    }
+}
 function getRefreshToken($userId,$auth=null,$company=false){
     return $auth ? $auth->crm_refresh_token : ($company ? get_default_settings_byUser($userId, 'crm_refresh_token') : get_loc_default_settings($comp_id, 'crm_refresh_token'));
 }
@@ -603,6 +630,7 @@ function ghl_token($req, $type = '',$userid=null,$forceCompany=false)
                     $user->agency_name=$res->company->name;
                     $user->white_label=$res->company->domain;
                     $user->logo_url=$res->company->logoUrl;
+                    $user->timezone =$res->company->timezone;
                     $user->save();
                 }
                 abort(redirect()->route('dashboard')->with('success', 'Successfully connected to CRM '.$mesg));
@@ -667,6 +695,7 @@ function ghl_oauth_call($code = '', $method = '')
 
     curl_close($curl);
     $response = json_decode($response);
+
     return $response;
 }
 
@@ -882,6 +911,7 @@ function getTableColumns1($table, $skip = [], $showcoltype = false)
 function getTableColumns($table, $skip = [], $showcoltype = false)
 {
     $columns = DB::getSchemaBuilder()->getColumnListing($table);
+
     if (!empty($skip)) {
         $columns = array_diff($columns, $skip);
     }
@@ -951,26 +981,8 @@ function capitalizeFL($string)
 {
     return ucwords($string);
 }
-function change_field_title($name = '')
-{
-    if ($name == 'Req Attendance') {
-        return 'Required Attendance';
-    } else if ($name == 'Is Auto') {
-        return ' Auto Transfer';
-    } else if ($name == 'Total Duration') {
-        return ' Total Duration (Days)';
-    } else if ($name == 'Tag Name') {
-        return 'Class Name';
-    } else if ($name == 'Std Contact Id' || $name == 'Attendance Contact Id') {
-        return 'Student Name';
-    } else if ($name == 'Tag Id' || $name == 'Attendance Tag Id') {
-        return 'Class Name';
-    } else if ($name == 'Is Finished') {
-        return 'Class Completed';
-    } else {
-        return false;
-    }
-}
+
+
 function getFieldType($type)
 {
     $type = strtolower($type);
@@ -1169,7 +1181,9 @@ function getFormFields($table, $skip = [], $user = '')
     $form = [];
 
     foreach ($fields as $key => $field) {
-
+       if (change_field_title($field)) {
+            $field = change_field_title($field);
+        }
         $key1 = ucwords(str_replace('_', ' ', $key));
         $form[$key] = createField($key, getFieldType($key), $field, $field, true, $user->$key ?? '', $col = 6, getoptions(getFieldType($key), $key, $user->id ?? ''),getValidation($key));
     }

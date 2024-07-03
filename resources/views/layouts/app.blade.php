@@ -43,14 +43,13 @@
     $topnav=false;
     $is_role=is_role();
 @endphp
-<body class="g-sidenav-hide  bg-gray-100">
-        @if(strpos($is_role , 'admin'))
-
-            @if($topnav)
-                @include('components.topnav')
-            @else
+<body class="g-sidenav-show  bg-gray-100">
+        @if(strpos($is_role , 'admin')!==false)
+            <!--@if($topnav)-->
+            <!--    @include('components.topnav')-->
+            <!--@else-->
             @include('components.sidenav')
-            @endif
+            <!--@endif-->
         @endif
 
 

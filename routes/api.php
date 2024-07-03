@@ -22,7 +22,7 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::get('/cache', function () {
     \Artisan::call('optimize:clear');
 });
-Route::post('/tracking/webhook', [SettingController::class, 'handleWebhook'])->name('trackingwebhook');
+Route::post('/tracking/webhook', [SettingController::class, 'handleContactUpdate'])->name('trackingwebhook');
 
 // Route::post('/location/webhook', [SettingController::class, 'locationWebhookHandle'])->name('locationwebhook');
 

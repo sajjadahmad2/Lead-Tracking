@@ -7,6 +7,8 @@ use App\Models\CompanyLocation;
 use App\Models\User;
 use App\Models\Contact;
 use App\Models\LocationSetting;
+use DateTime;
+use DateTimeZone;
 class SettingController extends Controller
 {
     public function index()
@@ -33,41 +35,22 @@ class SettingController extends Controller
                     'col' => 6,
                     'extra' => ''
                 ],
-                // 'company_logo' => [
-                //     'type' => 'file',
-                //     'name' => 'company_logo',
-                //     'label' => 'Company Logo',
-                //     'value' => setting('company_logo'),
-                //     'placeholder' => 'Company Logo',
-                //     'required' => true,
-                //     'col' => 3,
-                //     'extra' => ''
-                // ],
+
+
+                'company_logo' => [
+                    'type' => 'file',
+                    'name' => 'company_logo',
+                    'label' => 'Company Logo',
+                    'value' => setting('company_logo'),
+                    'placeholder' => 'Company Logo',
+                    'required' => true,
+                    'col' => 3,
+                    'extra' => ''
+                ],
 
             ];
             $company_form_fields  = [
-                'master_account' => [
-                    'type' => 'select',
-                    'name' => 'master_account',
-                    'label' => 'Master Account',
-                    'options' => \session()->has('location_ids') ? \session('location_ids') : getLocationIds()[0],
-                    'value' => \Auth::user()->master_account, // Set the default selected value here
-                    'required' => true,
-                    'is_select2'=>true,
-                    'is_multiple'=>false,
-                    'col' => 6,
-                    'extra' => ''
-                ],
-                'master_survey' => [
-                    'type' => 'text',
-                    'name' => 'master_survey',
-                    'label' => 'Master Survey',
-                    'value' => \Auth::user()->master_survey,// Set the default selected value here
-                    'placeholder' => 'Master_survey_id',
-                    'required' => true,
-                    'col' => 6,
-                    'extra' => ''
-                ],
+
             ];
         return view('settings.setting', get_defined_vars());
     }
@@ -108,9 +91,10 @@ class SettingController extends Controller
     {
         try{
             $this->saveLogs('ContactUpdate', $request->all());
-            if(strpos($request->type,'ContactCreate')){
-                $masterid=9;
+            if(strpos($request->type,'ContactCreate') !== false){
+                $masterid=1;
                 $user=User::where('id',$masterid)->first();
+                $this->saveLogs('Lead',$user);
                 if(!$user || empty($user) || is_null($user)){
                     return "User with this Master Account not Found";
                 }
@@ -118,79 +102,32 @@ class SettingController extends Controller
                     return 'Account In active';
                 }
                 $companylocations=CompanyLocation::where('location_id',$request->locationId)->first();
+                $this->saveLogs('Location Check',$companylocations);
                 if($companylocations){
-                    $companylocations->leads_dev=$companylocations->leads_dev + 1;
-                    $companylocations->today=$companylocations->today +1;
-                    $companylocation->save();
+                    // $companylocations->leads_dev=$companylocations->leads_dev + 1;
+                    // $companylocations->save();
+                    $this->updateData($companylocations,$masterid,$user);
                 }
+                $this->saveLogs('Leads Process Completed ','Successsfully');
                 return 'lead received';
             }
-            if(strpos($request->type,'locationCreate')){
-              $checklocation=CompanyLocation::where('location_id',$request->id)->first();
-              if(!$checklocation){
-                $checklocation= new CompantLocation;
-                $checklocation->location_id =$request->id;
-                $checklocation->location_name =$request->name;
-                $checklocation->location_email =$request->email;
-                $checklocation->status ='active';
-                $checklocation->type ='new client';
-                $checklocation->medicare ='medicare';
-                $checklocation->leads_dem =0;
-                $checklocation->leads_del =0;
-                $checklocation->save();
-                $apiUrl = "contacts/?limit=100";
-            set_time_limit(0);
-            ini_set('max_execution_time', 18000000);
-            $cl=$checklocation;
-            $counter=0;
-            $allContacts=[];
-        do {
-            $counter++;
-            $nextReq = false;
-            $delay = 1;
-            sleep($delay);
-            $contacts = ghl_api_call($masterid,$cl->location_id, $apiUrl); // Make the API call
-            Log::info("Job Created ".  json_encode($contacts));
-            if ($contacts) {
-                if (property_exists($contacts, 'contacts') && count($contacts->contacts) > 0) {
-                    $allContacts = array_merge($allContacts, $contacts->contacts);
-                    if (property_exists($contacts, 'meta') && property_exists($contacts->meta, 'nextPageUrl') && property_exists($contacts->meta, 'nextPage') && !is_null($contacts->meta->nextPage) && !empty($contacts->meta->nextPageUrl)) {
-                        $apiUrl = $contacts->meta->nextPageUrl;
-                        $nextReq = true;
-                    }
-
-                }
-
+            if(strpos($request->type,'locationCreate')!== false){
+                $this->saveLogs('Location created', $request->all());
+                $checklocation=CompanyLocation::where('location_id',$request->id)->first();
+                if(!$checklocation){
+                    $checklocation= new CompantLocation;
+                    $checklocation->location_id =$request->id;
+                    $checklocation->location_name =$request->name;
+                    $checklocation->location_email =$request->email;
+                    $checklocation->status ='active';
+                    $checklocation->type ='new client';
+                    $checklocation->medicare ='medicare';
+                    $checklocation->leads_dem =0;
+                    $checklocation->leads_dev =0;
+                    $checklocation->save();
+                    $this->updateData($checklocation,$masterid,$user);
+              $this->saveLogs('Location Storred', "successfully");
             }
-        } while ($nextReq);
-        $today=0;
-        $yesterday=0;
-        $last7days=0;
-        $currentDate = new DateTime();
-        foreach($allContacts as $contact){
-            if(property_exists($contact,'dateAdded')){
-                $dateAdded = new DateTime($contact->dateAdded);
-                $interval = $currentDate->diff($dateAdded);
-                $daysDiff = $interval->days;
-                if ($daysDiff === 0) {
-                    $today++;
-                }elseif ($daysDiff === 1) {
-                    $yesterday++;
-                }elseif ($daysDiff <= 7) {
-                    $last7days++;
-                }else{
-                    break;
-                }
-            }
-
-        }
-        $cl->today=$today;
-        $cl->yesterday=$yesterday;
-        $cl->last_7days=$last7days;
-        $cl->save();
-
-
-              }
             }
 
         }
@@ -201,7 +138,68 @@ class SettingController extends Controller
 
 
     }
+public function updateData($checklocation,$masterid,$user){
+    try{
+                    $apiUrl = "contacts/?limit=100";
+                    set_time_limit(0);
+                    ini_set('max_execution_time', 18000000);
+                    $cl=$checklocation;
+                    $counter=0;
+                    $allContacts=[];
+                    do {
+                            $counter++;
+                            $nextReq = false;
+                            $delay = 1;
+                            sleep($delay);
+                            $contacts = ghl_api_call($masterid,$cl->location_id, $apiUrl); // Make the API call
+                            if ($contacts) {
+                                if (property_exists($contacts, 'contacts') && count($contacts->contacts) > 0) {
 
+                                    $allContacts = array_merge($allContacts, $contacts->contacts);
+                                    if (property_exists($contacts, 'meta') && property_exists($contacts->meta, 'nextPageUrl') && property_exists($contacts->meta, 'nextPage') && !is_null($contacts->meta->nextPage) && !empty($contacts->meta->nextPageUrl)) {
+                                        $apiUrl = $contacts->meta->nextPageUrl;
+                                        $nextReq = true;
+                                    }else{
+                                       if (property_exists($contacts, 'meta')){
+                                            $cl->leads_dev=$contacts->meta->total;
+                                            $cl->save();
+                                        }
+                                    }
+
+                                }
+            }
+                        } while ($nextReq);
+                    $today = 0;
+                    $yesterday = 0;
+                    $last7days = 0;
+                    $adminTimeZone = new DateTimeZone($user->timezone);
+                    $currentDate = new DateTime('now', $adminTimeZone);
+                    foreach ($allContacts as $contact) {
+                        if (property_exists($contact, 'dateAdded')) {
+                            $dateAdded = new DateTime($contact->dateAdded);
+                            $dateAdded->setTimezone($adminTimeZone);
+                            $interval = $currentDate->diff($dateAdded);
+                            $daysDiff = $interval->days;
+                            if ($dateAdded->format('Y-m-d') === $currentDate->format('Y-m-d')) {
+                                $today++;
+                            } elseif ($dateAdded->format('Y-m-d') === $currentDate->modify('-1 day')->format('Y-m-d')) {
+                                $yesterday++;
+                                $currentDate->modify('+1 day');
+                            } elseif ($daysDiff <= 7) {
+                                $last7days++;
+                            }
+                        }
+                    }
+
+                    $cl->today = $today;
+                    $cl->yesterday = $yesterday;
+                    $cl->last_7days = $last7days;
+                    $cl->save();
+
+    }catch(\Exception $e){
+        $this->saveLogs('Lead Not dispursed due to error', json_encode($e->getMessage()));
+    }
+}
     public function cvUpdatorV2(Request $request,$companyid= null)
     {
         try {

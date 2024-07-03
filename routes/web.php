@@ -31,6 +31,7 @@ Route::middleware('auth')->group(function () {
 
     Route::prefix('user')->name('user.')->group(function () {
         Route::get('/list', 'UserController@list')->name('list');
+        Route::get('/sync/Data/{id?}', 'UserController@syncCRMData')->name('syncCRMdata');
         Route::get('/add', 'UserController@add')->name('add');
         Route::get('/edit/{id?}', 'UserController@edit')->name('edit');
         Route::post('/save/{id?}', 'UserController@save')->name('save');
@@ -48,6 +49,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('companylocation')->name('companylocation.')->group(function () {
         Route::get('/list', 'CompanyLocationController@list')->name('list');
         Route::get('/add', 'CompanyLocationController@add')->name('add');
+        Route::get('/sync/Data/{id?}', 'CompanyLocationController@SyncData')->name('syncdata');
         Route::get('/edit/{id?}', 'CompanyLocationController@edit')->name('edit');
         Route::post('/save/{id?}', 'CompanyLocationController@save')->name('save');
         Route::get('/delete/{id?}', 'CompanyLocationController@delete')->name('delete');
@@ -74,6 +76,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/reset-password/form', [NewPasswordController::class, 'store']);
     Route::get('/cache', function () {
         \Artisan::call('optimize:clear');
+        \Artisan::call('config:clear');
+        \Artisan::call('cache:clear');
+        echo 'done';
     });
 
     Route::get('/fetch', function () {
@@ -81,57 +86,73 @@ Route::middleware('auth')->group(function () {
         $retryDelay=3;
         @ini_set('max_execution_time', 10000);
         @set_time_limit(3000);
-        $companylocations=CompanyLocation::where('company_id',9)->where('today',NULL)->get();
+        $companylocations=CompanyLocation::where('company_id',9)->where('today','>',0)->get();
         foreach($companylocations as $cl){
             $apiUrl = "contacts/?limit=100";
             set_time_limit(0);
             ini_set('max_execution_time', 18000000);
             $counter=0;
             $allContacts=[];
-        do {
-            $counter++;
-            $nextReq = false;
-            $delay = 1;
-            sleep($delay);
             $contacts = ghl_api_call(9,$cl->location_id, $apiUrl); // Make the API call
-            Log::info("Job Created ".  json_encode($contacts));
+            // Log::info("Job Created ".  json_encode($contacts));
             if ($contacts) {
                 if (property_exists($contacts, 'contacts') && count($contacts->contacts) > 0) {
-                    $allContacts = array_merge($allContacts, $contacts->contacts);
-                    if (property_exists($contacts, 'meta') && property_exists($contacts->meta, 'nextPageUrl') && property_exists($contacts->meta, 'nextPage') && !is_null($contacts->meta->nextPage) && !empty($contacts->meta->nextPageUrl)) {
-                        $apiUrl = $contacts->meta->nextPageUrl;
-                        $nextReq = true;
+                    if (property_exists($contacts, 'meta')) {
+                        $total = $contacts->meta->total;
+                        $cl->leads_dev=$total;
+                        $cl->save();
+
                     }
 
                 }
 
             }
-        } while ($nextReq);
-        $today=0;
-        $yesterday=0;
-        $last7days=0;
-        $currentDate = new DateTime();
-        foreach($allContacts as $contact){
-            if(property_exists($contact,'dateAdded')){
-                $dateAdded = new DateTime($contact->dateAdded);
-                $interval = $currentDate->diff($dateAdded);
-                $daysDiff = $interval->days;
-                if ($daysDiff === 0) {
-                    $today++;
-                }elseif ($daysDiff === 1) {
-                    $yesterday++;
-                }elseif ($daysDiff <= 7) {
-                    $last7days++;
-                }else{
-                    break;
-                }
-            }
 
-        }
-        $cl->today=$today;
-        $cl->yesterday=$yesterday;
-        $cl->last_7days=$last7days;
-        $cl->save();
+
+        // do {
+        //     $counter++;
+        //     $nextReq = false;
+        //     $delay = 1;
+        //     sleep($delay);
+        //     $contacts = ghl_api_call(9,$cl->location_id, $apiUrl); // Make the API call
+        //     Log::info("Job Created ".  json_encode($contacts));
+        //     if ($contacts) {
+        //         if (property_exists($contacts, 'contacts') && count($contacts->contacts) > 0) {
+        //             $allContacts = array_merge($allContacts, $contacts->contacts);
+        //             if (property_exists($contacts, 'meta') && property_exists($contacts->meta, 'nextPageUrl') && property_exists($contacts->meta, 'nextPage') && !is_null($contacts->meta->nextPage) && !empty($contacts->meta->nextPageUrl)) {
+        //                 $apiUrl = $contacts->meta->nextPageUrl;
+        //                 $nextReq = true;
+        //             }
+
+        //         }
+
+        //     }
+        // } while ($nextReq);
+        // $today=0;
+        // $yesterday=0;
+        // $last7days=0;
+        // $currentDate = new DateTime();
+        // foreach($allContacts as $contact){
+        //     if(property_exists($contact,'dateAdded')){
+        //         $dateAdded = new DateTime($contact->dateAdded);
+        //         $interval = $currentDate->diff($dateAdded);
+        //         $daysDiff = $interval->days;
+        //         if ($daysDiff === 0) {
+        //             $today++;
+        //         }elseif ($daysDiff === 1) {
+        //             $yesterday++;
+        //         }elseif ($daysDiff <= 7) {
+        //             $last7days++;
+        //         }else{
+        //             break;
+        //         }
+        //     }
+
+        // }
+        // $cl->today=$today;
+        // $cl->yesterday=$yesterday;
+        // $cl->last_7days=$last7days;
+        // $cl->save();
 
         }
 
@@ -168,4 +189,14 @@ Route::get('/backtoadmin', function () {
 
     return redirect()->intended('/');
 })->name('backtoadmin');
+
+
+
+Route::get('/test-cache', function(){
+    \Artisan::call('config:clear');
+    \Artisan::call('cache:clear');
+    \Artisan::call('optimize:clear');
+    dd("done");
+});
+
 

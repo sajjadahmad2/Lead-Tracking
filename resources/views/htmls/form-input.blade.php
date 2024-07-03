@@ -33,7 +33,7 @@
     <div
         class="col-lg-{{ $field['col'] ?? '12' }} fv-row fv-plugins-icon-container my-2 @if ($field['name'] == 'service_id') d-none @endif">
         <label for="{{ $field['id'] ?? '' }}" class="py-2">{{ $field['label'] ?? '' }}</label>
-        <input type="{{ $field['type'] }}" name="{{ $field['name'] }}" @if($field['readonly']) readonly @endif
+        <input type="{{ $field['type'] }}" name="{{ $field['name'] }}" @if(array_key_exists('readonly',$field) && $field['readonly']) readonly @endif
             @if (!is_null($field['id'] ?? null)) id="{{ $field['class'] }}" @endif
             class="form-control form-control-lg form-control-solid  {{ $field['class'] ?? '' }} {{ $dropify }} mb-3 mb-lg-0"
             placeholder="{{ $field['placeholder'] }}" value="{{ $field['value'] }}" {{ $field['extra'] ?? '' }}

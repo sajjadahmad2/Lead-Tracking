@@ -18,26 +18,7 @@ $isrole=is_role();
                 'action' => route('setting.save'),
                 'method' => 'POST',
                 ])
-            </div>
-        </div>
-    </div>
-    @endif
-    @if($isrole == 'company' )
-    <div class="col-md-12 mx-auto">
-        <div class="card card-xxl-stretch-50 mb-5 mb-xl-10">
-            <div class="card-body pt-5">
-                @include('htmls.form', $company_form_fields, [
-                'action' => route('setting.save'),
-                'method' => 'POST',
-                ])
-            </div>
-        </div>
-    </div>
-    <div class="col-md-12">
-        <div class="card card-xxl-stretch-50 mb-5">
-            <div class="card-body" style=" width: 60% !Important;">
-
-                <div class="col-md-4">
+                <div class="col-md-4 mt-5">
 
                     @php
                         $href =
@@ -59,8 +40,8 @@ $isrole=is_role();
                         'description' => $description,
                     ])
                 </div>
-
             </div>
+
         </div>
     </div>
     @endif

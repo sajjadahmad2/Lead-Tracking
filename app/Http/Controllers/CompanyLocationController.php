@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Models\CompanyLocation;
+use DateTime;
+use DateTimeZone;
 use Illuminate\Http\Request;
 
 class CompanyLocationController extends Controller
@@ -37,21 +39,56 @@ class CompanyLocationController extends Controller
 
     public function list(Request $request)
     {
-
+        $isrole=is_role();
         $userId=login_id();
+        $user=User::where('id',$userId)->first();
+        $crmuserid=$user->crm_user_id;
+        $locationId=$user->location_id;
+        $company=company();
+        $company_id=$company->id;
+        if($isrole == 'admin'){
+            // $locationCount = CompanyLocation::where('company_id', $company_id)->where('location_id',$locationId)->count();
+            $locationCount = CompanyLocation::where('company_id', $company_id)->count();
+            $totalLeads = CompanyLocation::where('company_id', $company_id)->sum('leads_dem');
+            $contactsCount = CompanyLocation::where('company_id', $company_id)->sum('leads_dev');
+            $table_data = $this->model::where('company_id', $company_id)->get();
+        }elseif($isrole == 'company'){
+            $totalLeads = $this->model::whereHas('crmLocation', function ($query) use ($crmuserid) {
+                $query->where('user_id', $crmuserid);
+            })->sum('leads_dem');
+            $contactsCount = $this->model::whereHas('crmLocation', function ($query) use ($crmuserid) {
+                $query->where('user_id', $crmuserid);
+            })
+            ->sum('leads_dev');
+            $companyLocations =$this->model::whereHas('crmLocation', function ($query) use ($crmuserid) {
+                $query->where('user_id', $crmuserid);
+            })->get();
+            $table_data = $this->model::where('company_id', $company_id)->where('location_id',$locationId)->get();
+
+            //$this->updateData($table_data,$company_id,$company);
+        }
         $table_fields = getTableColumns($this->table, $this->skip);
-        $locationCount = CompanyLocation::where('company_id', $userId)->count();
-        $totalLeads = CompanyLocation::where('company_id', $userId)->sum('leads_dem');
-        $contactsCount = CompanyLocation::where('company_id', $userId)->sum('leads_dev');
+        $table_fields['leads_dem'] = change_field_title($table_fields['leads_dem'] ?? '');
+        $table_fields['leads_dev'] = change_field_title($table_fields['leads_dev'] ?? '');
         $table_fields = array_merge($table_fields, ['lead_rem' => 'Lead Remain','action' => 'Action']);
-        $table_data = $this->model::get();
+
         foreach ($table_data as $key => $value) {
             foreach ($this->tobechanged as $key1 => $value1) {
                 $table_data[$key][$key1] = $value1[$value[$key1]];
             }
         }
         if ($request->ajax()) {
-            $table_data = $this->model::get();
+            if($isrole=='company'){
+                $table_data = $this->model::whereHas('crmLocation', function ($query) use ($crmuserid) {
+                    $query->where('user_id', $crmuserid);
+                })->get();
+                //$this->updateData($table_data,$company_id,$company);
+                //$table_data = $this->model::where('company_id', $company_id)->where('location_id',$locationId)->get();
+
+            }else{
+                $table_data = $this->model::get();
+            }
+
             return \DataTables::of($table_data)
                 ->addIndexColumn()
                 ->editColumn('action', function ($row) {
@@ -132,7 +169,94 @@ class CompanyLocationController extends Controller
         $user->save();
         return redirect()->route($this->route . '.list')->with('success', $this->title . 'status changed successfully');
     }
+    public function updateData($checklocation,$masterid,$user){
+        try{
+                        $apiUrl = "contacts/?limit=100";
+                        set_time_limit(0);
+                        ini_set('max_execution_time', 18000000);
+                        $cl=$checklocation[0];
 
+                        $counter=0;
+                        $allContacts=[];
+                        do {
+                                $counter++;
+                                $nextReq = false;
+                                $delay = 1;
+                                sleep($delay);
+                                $contacts = ghl_api_call($masterid,$cl->location_id, $apiUrl);
+                                if ($contacts) {
+                                    if (property_exists($contacts, 'contacts') && count($contacts->contacts) > 0) {
+
+                                        $allContacts = array_merge($allContacts, $contacts->contacts);
+                                        if (property_exists($contacts, 'meta') && property_exists($contacts->meta, 'nextPageUrl') && property_exists($contacts->meta, 'nextPage') && !is_null($contacts->meta->nextPage) && !empty($contacts->meta->nextPageUrl)) {
+                                            $apiUrl = $contacts->meta->nextPageUrl;
+                                            $nextReq = true;
+                                        }else{
+                                           if (property_exists($contacts, 'meta')){
+                                                $cl->leads_dev=$contacts->meta->total;
+                                                $cl->save();
+                                            }
+                                        }
+
+                                    }else{
+                                        continue;
+                                    }
+                                }
+                            } while ($nextReq);
+                        $today = 0;
+                        $yesterday = 0;
+                        $last7days = 0;
+                        $adminTimeZone = new DateTimeZone($user->timezone);
+                        $currentDate = new DateTime('now', $adminTimeZone);
+                        foreach ($allContacts as $contact) {
+                            if (property_exists($contact, 'dateAdded')) {
+                                $dateAdded = new DateTime($contact->dateAdded);
+                                $dateAdded->setTimezone($adminTimeZone);
+                                $interval = $currentDate->diff($dateAdded);
+                                $daysDiff = $interval->days;
+                                if ($dateAdded->format('Y-m-d') === $currentDate->format('Y-m-d')) {
+                                    $today++;
+                                } elseif ($dateAdded->format('Y-m-d') === $currentDate->modify('-1 day')->format('Y-m-d')) {
+                                    $yesterday++;
+                                    $currentDate->modify('+1 day');
+                                } elseif ($daysDiff <= 7) {
+                                    $last7days++;
+                                }
+                            }
+                        }
+
+                        $cl->today = $today;
+                        $cl->yesterday = $yesterday;
+                        $cl->last_7days = $last7days;
+                        $cl->save();
+                        return true;
+
+        }catch(\Exception $e){
+            saveLogs('Lead not updatedd in listing due to error', json_encode($e->getMessage()));
+
+        }
+    }
+    public function syncData($id= NULL){
+      if(!is_null($id)){
+        $user=User::where('id',$id)->first();
+        if($user){
+            $crmuserid=$user->crm_user_id;
+            $locationId=$user->location_id;
+            $company=company();
+            $company_id=$company->id;
+            $locations=CompanyLocation::whereHas('crmLocation', function ($query) use ($crmuserid) {
+                $query->where('user_id', $crmuserid);
+            })->get();
+            foreach($locations as $location){
+                $this->updateData($location,$company_id,$company);
+            }
+
+            return response()->json(['status'=>'success','Data'=>"Updated SuccessFully"]);
+        }else{
+            return response()->json(['status'=>'error','Data'=>"User not found"]);
+        }
+      }
+    }
     public function statstics(){
         return view('statstics');
     }

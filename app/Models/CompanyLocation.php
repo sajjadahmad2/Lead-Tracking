@@ -22,11 +22,15 @@ class CompanyLocation extends Model
         'manager_id',
         'type',
         'medicare',
+        'crm_user_id',
 
     ];
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+    public function crmLocation(){
+        return $this->hasMany(UserLocation::class,'location_id','id');
     }
 
 }
